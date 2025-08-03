@@ -72,25 +72,28 @@ class DocumentLoaderFactory:
             
         return None
     
-class SummarizeConfig:
+class SummarizerConfig:
     """Configuration class for the summarizer"""
 
     def __init__(self, model_name: str = "Gemma-7b-It", max_words: int = 300):
         self.model_name = model_name
         self.max_words = max_words
-        self.prompt_templates = f""" Provide a summary of the following content in {max_words} words: Content:{{text}}"""
+        self.prompt_template = f"""
+        Provide a summary of the following content in {max_words} words:
+        Content:{{text}}
+        """
 
         
-class ContentSummarize:
+class ContentSummarizer:
     """Main class for content summarization"""
 
-    def __init__(self, config : SummarizeConfig):
+    def __init__(self, config: SummarizerConfig):
         self.config = config
-        self.loader_factory = DocumentLoaderFactory
+        self.loader_factory = DocumentLoaderFactory()
         self.llm = None
         self.prompt = PromptTemplate(
-            template = config.prompt_templates,
-            input_variables = ["text"]
+            template=self.config.prompt_template,
+            input_variables=["text"]
         )
 
     def initialize_llm(self, groq_api_key : str) -> bool:
@@ -167,3 +170,81 @@ class ContentSummarize:
             return None, error_msg
         
         return summary, ""
+    
+
+class StreamlitUI:
+    """Class to handle Streamlit user interface"""
+
+    def __init__(self):
+        self.summarizer = ContentSummarizer(SummarizerConfig())
+        self.setup_page_config()
+
+
+    def setup_page_config(self):
+        """Setup Streamlit page configuration"""
+        st.set_page_config(
+            page_title="LangChain: Summarize Text From YT or Website",
+            page_icon="🦜"
+        )
+
+    def render_header(self):
+        """Render the page header"""
+        st.title("🦜 LangChain: Summarize Text From YT or Website")
+        st.subheader('Summarize URL')
+
+    def render_sidebar(self) -> str:
+        """Render sidebar and return API key"""
+        with st.sidebar:
+            groq_api_key = st.text_input(
+                "Groq API Key",
+                value = "",
+                type = 'password',
+                help = "Enter your Groq API key to use the summarization service"
+            )
+        return groq_api_key
+    
+    def render_main_content(self) -> str:
+        """Render main content area and return URL"""
+        url = st.text_input(
+            "URL",
+            label_visibility = "collapsed",
+            placeholder = "Enter YouTube video URL website URL here...."
+        )
+        return url
+    
+    def handel_summarization(self, groq_api_key : str, url : str):
+        """Handle the summarization process"""
+        with st.spinner("Processing... Please wait while we analyze the content."):
+            summary, error_msg = self.summarizer.process_url(groq_api_key, url)
+
+            if summary:
+                st.success("✅ Summary generated successfully!")
+                st.write("### Summary")
+                st.write(summary)
+
+            else:
+                st.error(f"❌ Error: {error_msg}")
+
+    def run(self):
+        """Main method to run the Streamlit application"""
+        self.render_header()
+
+        groq_api_key = self.render_sidebar()
+        url = self.render_main_content()
+
+        if st.button("🚀 Summarize the Content from YT or Website"):
+            self.handel_summarization(groq_api_key, url)
+
+def main():
+    """Main function to run the application"""
+    try:
+        app = StreamlitUI()
+        app.run()
+
+    except Exception as e:
+        st.error(f"Application error : {str(e)}")
+        logging.error(f"Application error : {e}")
+
+
+if __name__ == "__main__":
+    main()
